@@ -128,4 +128,572 @@
                 <h3 style="margin-bottom: 8px; color: #0f172a;">📊 Consultar Respuestas por Convocatoria y Día</h3>
                 <div class="grid-form" style="margin-bottom: 14px;">
                     <div class="form-group">
-                        <label>Selecciona la Encuesta:</
+                        <label>Selecciona la Encuesta:</label>
+                        <select id="manager-poll-select" onchange="updateManagerPollDays()"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Selecciona el Día:</label>
+                        <select id="manager-day-select" onchange="renderManagerPollResults()"></select>
+                    </div>
+                </div>
+                <div id="manager-poll-results" style="margin-top: 12px;"></div>
+            </div>
+
+            <!-- PUBLICAR EVENTO FIJO -->
+            <div class="card" style="border-top: 4px solid #0284c7;">
+                <h3 style="margin-bottom: 16px; color: #0f172a;">➕ Publicar Nuevo Servicio / Evento Fijo</h3>
+                <form onsubmit="handleCreateEvent(event)">
+                    <div class="grid-form">
+                        <div class="form-group">
+                            <label>Título del Evento:</label>
+                            <input type="text" id="ev-title" placeholder="Ej: Cena Corporativa" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Fecha:</label>
+                            <input type="date" id="ev-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Lugar / Dirección:</label>
+                            <input type="text" id="ev-location" placeholder="Ej: Movistar Arena" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Horario:</label>
+                            <input type="text" id="ev-time" placeholder="Ej: 20:00 - 02:00" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Uniforme:</label>
+                            <input type="text" id="ev-uniform" placeholder="Ej: Camisa blanca, pantalón negro" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nº Camareros Necesarios:</label>
+                            <input type="number" id="ev-needed" min="1" max="50" value="5" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-main" style="width: 100%; margin-top: 10px; background-color: #0284c7;">Publicar Evento</button>
+                </form>
+            </div>
+
+            <h3 style="margin-bottom: 16px;">Gestión de Eventos Fijos</h3>
+            <div id="manager-events-list"></div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyD2HLcGNrj_JFT6TtYaA9gmiSJKeJTVDSU",
+            authDomain: "mallorca-catering-f908b.firebaseapp.com",
+            databaseURL: "https://mallorca-catering-f908b-default-rtdb.firebaseio.com",
+            projectId: "mallorca-catering-f908b",
+            storageBucket: "mallorca-catering-f908b.firebasestorage.app",
+            messagingSenderId: "833676580799",
+            appId: "1:833676580799:web:108af842b3d2c17f2c730a",
+            measurementId: "G-JSTT3MQKTB"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let currentWorker = null;
+        try {
+            currentWorker = JSON.parse(localStorage.getItem('current_catering_worker_obj')) || null;
+        } catch (e) {}
+
+        let events = [];
+        let polls = [];
+        let habitualWorkers = [];
+        let waiterRenderedOnce = false;
+
+        db.ref('workers').on('value', (snapshot) => {
+            const data = snapshot.val();
+            habitualWorkers = data ? Object.values(data) : [];
+            habitualWorkers.sort((a, b) => a.name.localeCompare(b.name));
+            populateWorkerSelect(habitualWorkers);
+        });
+
+        function populateWorkerSelect(list) {
+            const select = document.getElementById('worker-select');
+            if (list.length === 0) {
+                select.innerHTML = '<option value="">No hay resultados</option>';
+                return;
+            }
+            // SÓLO MUESTRA EL NOMBRE Y APELLIDO (PRIVACIDAD DE DNI MANTENIDA)
+            select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
+                list.map((w, index) => `<option value="${index}">${w.name}</option>`).join('');
+        }
+
+        function filterWorkerList() {
+            const query = document.getElementById('worker-search-input').value.trim().toLowerCase();
+            const select = document.getElementById('worker-select');
+            if (!query) {
+                populateWorkerSelect(habitualWorkers);
+                return;
+            }
+            const filtered = habitualWorkers.filter(w => w.name.toLowerCase().includes(query));
+            if (filtered.length === 0) {
+                select.innerHTML = '<option value="">No hay resultados</option>';
+                return;
+            }
+            select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
+                filtered.map((w) => {
+                    const originalIndex = habitualWorkers.findIndex(item => item.name === w.name);
+                    return `<option value="${originalIndex}">${w.name}</option>`;
+                }).join('');
+        }
+
+        db.ref('events').on('value', (snapshot) => {
+            const data = snapshot.val();
+            events = data ? Object.values(data) : [];
+            refreshCurrentView();
+        });
+
+        db.ref('polls').on('value', (snapshot) => {
+            const data = snapshot.val();
+            polls = data ? Object.values(data) : [];
+            const managerSection = document.getElementById('manager-section');
+            if (managerSection.style.display === 'block' || !waiterRenderedOnce) {
+                refreshCurrentView();
+                waiterRenderedOnce = true;
+            }
+        });
+
+        function refreshCurrentView() {
+            const managerSection = document.getElementById('manager-section');
+            if (managerSection.style.display === 'block') {
+                populateManagerPollSelect();
+                renderManagerEvents();
+            } else if (currentWorker) {
+                renderWaiterPolls();
+                renderWaiterEvents();
+            }
+        }
+
+        function requestManagerAccess() {
+            const pass = prompt('Introduce la contraseña de administración:');
+            if (pass === '1234') {
+                switchView('manager');
+            } else if (pass !== null) {
+                alert('Contraseña incorrecta.');
+            }
+        }
+
+        function switchView(view) {
+            document.getElementById('manager-section').style.display = 'none';
+            document.getElementById('waiter-section').style.display = 'none';
+            document.getElementById('login-section').style.display = 'none';
+
+            if (view === 'manager') {
+                document.getElementById('manager-section').style.display = 'block';
+                populateManagerPollSelect();
+                renderManagerEvents();
+            } else {
+                if (currentWorker) {
+                    document.getElementById('waiter-section').style.display = 'block';
+                    document.getElementById('current-user-display').innerText = currentWorker.name;
+                    waiterRenderedOnce = false;
+                    renderWaiterPolls();
+                    renderWaiterEvents();
+                } else {
+                    document.getElementById('login-section').style.display = 'block';
+                }
+            }
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const selectedIndex = document.getElementById('worker-select').value;
+            const enteredDni = document.getElementById('worker-dni').value.trim().toUpperCase();
+
+            if (selectedIndex === "") {
+                alert('Por favor, selecciona tu nombre.');
+                return;
+            }
+
+            const foundWorker = habitualWorkers[parseInt(selectedIndex)];
+            if (!foundWorker) {
+                alert('El trabajador seleccionado no se encuentra en la base de datos.');
+                return;
+            }
+
+            // Validar DNI OBLIGATORIO (excepto si es Mohamed Ouladi o si no tiene DNI registrado)
+            const hasDniInDb = foundWorker.dni && foundWorker.dni.trim() !== '' && foundWorker.dni.trim() !== 'NAN' && foundWorker.dni.trim() !== 'undefined';
+            
+            if (hasDniInDb) {
+                if (foundWorker.dni.trim().toUpperCase() !== enteredDni) {
+                    alert('El DNI introducido no coincide con el registrado en la base de datos.');
+                    return;
+                }
+            } else {
+                // Si es Mohamed Ouladi o alguien sin DNI en la BD, exigimos que escriba algo o validamos su nombre
+                if (!enteredDni) {
+                    alert('Por favor, introduce tu DNI.');
+                    return;
+                }
+            }
+
+            const cleanNameKey = foundWorker.name.replace(/[^a-zA-Z0-9]/g, '_');
+            currentWorker = { key: cleanNameKey, name: foundWorker.name };
+            try {
+                localStorage.setItem('current_catering_worker_obj', JSON.stringify(currentWorker));
+            } catch (e) {}
+            switchView('waiter');
+        }
+
+        function handleAddNewWorker(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-w-name').value.trim().toUpperCase();
+            const dni = document.getElementById('new-w-dni').value.trim().toUpperCase();
+
+            if (!name || !dni) {
+                alert('Introduce el nombre y el DNI.');
+                return;
+            }
+
+            const workerId = dni.replace(/[^a-zA-Z0-9]/g, '_');
+            db.ref('workers/' + workerId).set({ name, dni }, (error) => {
+                if (error) {
+                    alert('Error al guardar.');
+                } else {
+                    e.target.reset();
+                    alert(`¡Trabajador ${name} añadido a la base de datos con éxito! Ya aparece en el desplegable.`);
+                }
+            });
+        }
+
+        function logoutWorker() {
+            currentWorker = null;
+            try {
+                localStorage.removeItem('current_catering_worker_obj');
+            } catch (e) {}
+            switchView('login-section');
+        }
+
+        function getDatesInRange(startDate, endDate) {
+            const dates = [];
+            let curr = new Date(startDate);
+            const last = new Date(endDate);
+            while (curr <= last) {
+                const dateStr = curr.toISOString().split('T')[0];
+                dates.push({ date: dateStr, label: curr.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }) });
+                curr.setDate(curr.getDate() + 1);
+            }
+            return dates;
+        }
+
+        function handleCreatePoll(e) {
+            e.preventDefault();
+            const title = document.getElementById('poll-title').value.trim();
+            const start = document.getElementById('poll-start').value;
+            const end = document.getElementById('poll-end').value;
+
+            if (start > end) {
+                alert('La fecha de inicio no puede ser posterior a la fecha de fin.');
+                return;
+            }
+
+            const pollId = String(Date.now());
+            const newPoll = {
+                id: pollId,
+                title,
+                startDate: start,
+                endDate: end,
+                responses: {}
+            };
+
+            db.ref('polls/' + pollId).set(newPoll, (error) => {
+                if (error) {
+                    alert('Error al guardar.');
+                } else {
+                    e.target.reset();
+                    alert('¡Convocatoria creada con éxito!');
+                }
+            });
+        }
+
+        function saveWaiterPollResponse(pollId) {
+            const poll = polls.find(p => p.id == pollId);
+            if (!poll) return;
+
+            if (!poll.responses) poll.responses = {};
+            if (!poll.responses[currentWorker.key]) {
+                poll.responses[currentWorker.key] = { name: currentWorker.name, days: {} };
+            }
+
+            const dates = getDatesInRange(poll.startDate, poll.endDate);
+            dates.forEach(d => {
+                const sel = document.getElementById(`poll-${pollId}-sel-${d.date}`);
+                if (sel) {
+                    poll.responses[currentWorker.key].days[d.date] = sel.value;
+                }
+            });
+
+            db.ref('polls/' + pollId).set(poll, (error) => {
+                if (error) {
+                    alert('Error al guardar: ' + error.message);
+                } else {
+                    alert('¡Tu disponibilidad ha sido guardada en la nube con éxito!');
+                    waiterRenderedOnce = false;
+                    renderWaiterPolls();
+                }
+            });
+        }
+
+        function renderWaiterPolls() {
+            const container = document.getElementById('waiter-polls-list');
+            if (polls.length === 0) {
+                container.innerHTML = '<p style="font-size:13px; color:#94a3b8; font-style:italic;">No hay convocatorias de disponibilidad abiertas.</p>';
+                return;
+            }
+
+            container.innerHTML = polls.map(poll => {
+                const dates = getDatesInRange(poll.startDate, poll.endDate);
+                const workerData = (poll.responses && poll.responses[currentWorker.key] && poll.responses[currentWorker.key].days) || {};
+
+                return `
+                    <div class="card" style="border-top: 4px solid #16a34a;">
+                        <h4 style="margin-bottom: 4px; color: #166534;">🎄 ${poll.title}</h4>
+                        <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Del ${poll.startDate} al ${poll.endDate}</p>
+                        <p style="font-size: 13px; color: #475569; margin-bottom: 16px;">
+                            🟢 <strong>Todo el día</strong> | ☀️ <strong>Mediodía</strong> | 🌙 <strong>Noche</strong> | ❌ <strong>No disponible</strong>
+                        </p>
+                        ${dates.map(d => {
+                            const val = workerData[d.date] || 'none';
+                            return `
+                                <div class="day-row">
+                                    <strong style="text-transform: capitalize;">${d.label}</strong>
+                                    <select id="poll-${poll.id}-sel-${d.date}" style="width: 170px; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                                        <option value="none" ${val === 'none' ? 'selected' : ''}>❌ No disponible</option>
+                                        <option value="all" ${val === 'all' ? 'selected' : ''}>🟢 Todo el día</option>
+                                        <option value="midday" ${val === 'midday' ? 'selected' : ''}>☀️ Mediodía</option>
+                                        <option value="night" ${val === 'night' ? 'selected' : ''}>🌙 Noche</option>
+                                    </select>
+                                </div>
+                            `;
+                        }).join('')}
+                        <button class="btn btn-success" onclick="saveWaiterPollResponse('${poll.id}')" style="width: 100%; margin-top: 16px; padding: 12px; font-size: 14px;">💾 Guardar Mi Disponibilidad</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function populateManagerPollSelect() {
+            const select = document.getElementById('manager-poll-select');
+            if (polls.length === 0) {
+                select.innerHTML = '<option value="">No hay encuestas creadas</option>';
+                document.getElementById('manager-day-select').innerHTML = '';
+                document.getElementById('manager-poll-results').innerHTML = '<p style="font-size:13px; color:#64748b; font-style:italic;">Crea una encuesta arriba para empezar.</p>';
+                return;
+            }
+
+            select.innerHTML = polls.map(p => `<option value="${p.id}">${p.title} (${p.startDate} al ${p.endDate})</option>`).join('');
+            updateManagerPollDays();
+        }
+
+        function updateManagerPollDays() {
+            const pollId = document.getElementById('manager-poll-select').value;
+            const poll = polls.find(p => p.id == pollId);
+            const daySelect = document.getElementById('manager-day-select');
+
+            if (!poll) {
+                daySelect.innerHTML = '';
+                return;
+            }
+
+            const dates = getDatesInRange(poll.startDate, poll.endDate);
+            daySelect.innerHTML = dates.map(d => `<option value="${d.date}" style="text-transform:capitalize;">${d.label}</option>`).join('');
+            renderManagerPollResults();
+        }
+
+        function renderManagerPollResults() {
+            const pollId = document.getElementById('manager-poll-select').value;
+            const selectedDate = document.getElementById('manager-day-select').value;
+            const container = document.getElementById('manager-poll-results');
+            const poll = polls.find(p => p.id == pollId);
+
+            if (!poll || !selectedDate) {
+                container.innerHTML = '<p style="font-size:13px; color:#64748b;">Selecciona una encuesta y un día.</p>';
+                return;
+            }
+
+            const responses = poll.responses || {};
+            const workerKeys = Object.keys(responses);
+            const availableList = [];
+            const symbolMap = { 'all': '🟢', 'midday': '☀️', 'night': '🌙' };
+
+            workerKeys.forEach(wKey => {
+                const data = responses[wKey];
+                const name = data.name || wKey;
+                const daysObj = data.days || {};
+                const rawStatus = daysObj[selectedDate] || 'none';
+                if (rawStatus !== 'none') {
+                    const statusEmoji = symbolMap[rawStatus] || rawStatus;
+                    availableList.push({ name, status: statusEmoji });
+                }
+            });
+
+            if (availableList.length === 0) {
+                container.innerHTML = '<p style="font-size:13px; color:#94a3b8; font-style:italic;">Nadie ha marcado disponibilidad para este día.</p>';
+                return;
+            }
+
+            container.innerHTML = `
+                <p style="font-size: 13px; font-weight: 600; color: #166534; margin-bottom: 8px;">Personal disponible (${availableList.length}):</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">
+                    ${availableList.map(item => `
+                        <div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px;">
+                            <strong>${item.name}</strong> <span style="font-size: 15px;">${item.status}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function handleCreateEvent(e) {
+            e.preventDefault();
+            const eventId = String(Date.now());
+            const newEv = {
+                id: eventId,
+                title: document.getElementById('ev-title').value,
+                date: document.getElementById('ev-date').value,
+                location: document.getElementById('ev-location').value,
+                time: document.getElementById('ev-time').value,
+                uniform: document.getElementById('ev-uniform').value,
+                needed: parseInt(document.getElementById('ev-needed').value),
+                availability: {},
+                assigned: []
+            };
+
+            db.ref('events/' + eventId).set(newEv, (error) => {
+                if (error) {
+                    alert('Error al crear el evento.');
+                } else {
+                    e.target.reset();
+                    alert('¡Evento creado con éxito!');
+                }
+            });
+        }
+
+        function deleteEvent(id) {
+            if (confirm('¿Quieres eliminar este evento?')) {
+                db.ref('events/' + id).remove();
+            }
+        }
+
+        function setAvailability(eventId, status) {
+            const ev = events.find(e => e.id == eventId);
+            if (ev) {
+                if (!ev.availability) ev.availability = {};
+                ev.availability[currentWorker.key] = { name: currentWorker.name, status: status };
+                db.ref('events/' + eventId).set(ev, (error) => {
+                    if (error) {
+                        alert('Error al guardar el evento: ' + error.message);
+                    } else {
+                        alert('¡Apuntado correctamente!');
+                    }
+                });
+            }
+        }
+
+        function toggleAssign(eventId, workerName) {
+            const ev = events.find(e => e.id == eventId);
+            if (ev) {
+                if (!ev.assigned) ev.assigned = [];
+                const idx = ev.assigned.indexOf(workerName);
+                if (idx > -1) {
+                    ev.assigned.splice(idx, 1);
+                } else {
+                    ev.assigned.push(workerName);
+                }
+                db.ref('events/' + eventId).set(ev);
+            }
+        }
+
+        function renderWaiterEvents() {
+            const container = document.getElementById('waiter-events-list');
+            if (events.length === 0) {
+                container.innerHTML = '<p style="font-size:13px; color:#94a3b8; font-style:italic;">No hay eventos específicos publicados.</p>';
+                return;
+            }
+            container.innerHTML = events.map(ev => {
+                const myAv = (ev.availability && ev.availability[currentWorker.key]) || {};
+                return `
+                    <div class="card">
+                        <div class="event-header">
+                            <div>
+                                <span class="badge">${ev.date}</span>
+                                <h4 style="margin-top:4px;">${ev.title}</h4>
+                            </div>
+                            <div style="font-size:13px; color:#475569; text-align:right;">
+                                📍 ${ev.location}<br>🕒 ${ev.time}
+                            </div>
+                        </div>
+                        <p style="font-size:13px; margin-bottom:12px;"><strong>Uniforme:</strong> ${ev.uniform}</p>
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn ${myAv.status === 'available' ? 'btn-success' : 'btn-secondary'}" onclick="setAvailability('${ev.id}', 'available')">
+                                ${myAv.status === 'available' ? '✅ Apuntado' : 'Apuntarme'}
+                            </button>
+                            <button class="btn ${myAv.status === 'busy' ? 'btn-danger' : 'btn-secondary'}" onclick="setAvailability('${ev.id}', 'busy')">
+                                ${myAv.status === 'busy' ? '❌ No disponible' : 'No disponible'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderManagerEvents() {
+            const container = document.getElementById('manager-events-list');
+            if (events.length === 0) {
+                container.innerHTML = '<p style="font-size:13px; color:#94a3b8; font-style:italic;">No hay eventos fijos creados.</p>';
+                return;
+            }
+            container.innerHTML = events.map(ev => {
+                const availables = Object.entries(ev.availability || {}).filter(([k, v]) => v.status === 'available');
+                const assignedList = ev.assigned || [];
+                return `
+                    <div class="card">
+                        <div class="event-header">
+                            <div>
+                                <span class="badge">${ev.date}</span>
+                                <h4 style="margin-top:4px;">${ev.title}</h4>
+                                <p style="font-size:13px; color:#64748b;">📍 ${ev.location} | 🕒 ${ev.time}</p>
+                            </div>
+                            <button class="btn btn-danger" onclick="deleteEvent('${ev.id}')" style="font-size:12px;">🗑️ Eliminar</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                            <div>
+                                <h5 style="font-size:13px; margin-bottom:6px;">🟢 Apuntados (${availables.length})</h5>
+                                ${availables.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Nadie apuntado aún.</p>' : 
+                                    availables.map(([wKey, v]) => {
+                                        const name = v.name || wKey;
+                                        const isAssigned = assignedList.includes(name);
+                                        return `
+                                            <div style="background:#f8fafc; padding:8px; border-radius:6px; margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+                                                <strong>${name}</strong>
+                                                <button class="btn ${isAssigned ? 'btn-danger' : 'btn-main'}" onclick="toggleAssign('${ev.id}', '${name}')" style="font-size:10px; padding:4px 8px;">
+                                                    ${isAssigned ? 'Quitar' : 'Asignar ✓'}
+                                                </button>
+                                            </div>
+                                        `;
+                                    }).join('')
+                                }
+                            </div>
+                            <div>
+                                <h5 style="font-size:13px; margin-bottom:6px;">👥 Equipo Cerrado (${assignedList.length} / ${ev.needed})</h5>
+                                ${assignedList.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Sin asignaciones.</p>' :
+                                    assignedList.map(name => `<span class="badge" style="background:#dcfce7; color:#166534; display:inline-block; margin:2px;">✓ ${name}</span>`).join('')
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        if (!currentWorker) {
+            switchView('login');
+        } else {
+            switchView('waiter');
+        }
+    </script>
+</body>
+</html>
