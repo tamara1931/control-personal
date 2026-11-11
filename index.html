@@ -195,7 +195,7 @@
 
         let currentWorker = null;
         try {
-            currentWorker = JSON.parse(localStorage.getItem('current_catering_worker')) || null;
+            currentWorker = JSON.parse(localStorage.getItem('current_catering_worker_obj')) || null;
         } catch (e) {}
 
         let events = [];
@@ -216,7 +216,7 @@
                 return;
             }
             select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
-                list.map(w => `<option value="${w.name}">${w.name}</option>`).join('');
+                list.map(w => `<option value="${w.dni}">${w.name}</option>`).join('');
         }
 
         function filterWorkerList() {
@@ -273,7 +273,7 @@
             } else {
                 if (currentWorker) {
                     document.getElementById('waiter-section').style.display = 'block';
-                    document.getElementById('current-user-display').innerText = currentWorker;
+                    document.getElementById('current-user-display').innerText = currentWorker.name;
                     renderWaiterPolls();
                     renderWaiterEvents();
                 } else {
@@ -284,15 +284,15 @@
 
         function handleLogin(e) {
             e.preventDefault();
-            const selectedName = document.getElementById('worker-select').value;
+            const selectedDni = document.getElementById('worker-select').value;
             const enteredDni = document.getElementById('worker-dni').value.trim().toUpperCase();
 
-            if (!selectedName) {
+            if (!selectedDni) {
                 alert('Por favor, selecciona tu nombre.');
                 return;
             }
 
-            const foundWorker = habitualWorkers.find(w => w.name === selectedName);
+            const foundWorker = habitualWorkers.find(w => w.dni === selectedDni);
             if (!foundWorker) {
                 alert('El trabajador seleccionado no se encuentra en la base de datos.');
                 return;
@@ -305,9 +305,9 @@
                 }
             }
 
-            currentWorker = selectedName;
+            currentWorker = { dni: foundWorker.dni, name: foundWorker.name };
             try {
-                localStorage.setItem('current_catering_worker', JSON.stringify(currentWorker));
+                localStorage.setItem('current_catering_worker_obj', JSON.stringify(currentWorker));
             } catch (e) {}
             switchView('waiter');
         }
@@ -336,7 +336,7 @@
         function logoutWorker() {
             currentWorker = null;
             try {
-                localStorage.removeItem('current_catering_worker');
+                localStorage.removeItem('current_catering_worker_obj');
             } catch (e) {}
             switchView('login-section');
         }
@@ -388,23 +388,24 @@
             if (!poll) return;
 
             if (!poll.responses) poll.responses = {};
-            if (!poll.responses[currentWorker]) {
-                poll.responses[currentWorker] = { days: {} };
+            const workerKey = currentWorker.dni.replace(/[^a-zA-Z0-9]/g, '_');
+            if (!poll.responses[workerKey]) {
+                poll.responses[workerKey] = { name: currentWorker.name, days: {} };
             }
 
             const dates = getDatesInRange(poll.startDate, poll.endDate);
             dates.forEach(d => {
                 const sel = document.getElementById(`poll-${pollId}-sel-${d.date}`);
                 if (sel) {
-                    poll.responses[currentWorker].days[d.date] = sel.value;
+                    poll.responses[workerKey].days[d.date] = sel.value;
                 }
             });
 
             db.ref('polls/' + pollId).set(poll, (error) => {
                 if (error) {
-                    alert('Error al guardar.');
+                    alert('Error al guardar: ' + error.message);
                 } else {
-                    alert('¡Tu disponibilidad ha sido guardada en la nube!');
+                    alert('¡Tu disponibilidad ha sido guardada en la nube con éxito!');
                 }
             });
         }
@@ -418,7 +419,8 @@
 
             container.innerHTML = polls.map(poll => {
                 const dates = getDatesInRange(poll.startDate, poll.endDate);
-                const workerData = (poll.responses && poll.responses[currentWorker] && poll.responses[currentWorker].days) || {};
+                const workerKey = currentWorker.dni.replace(/[^a-zA-Z0-9]/g, '_');
+                const workerData = (poll.responses && poll.responses[workerKey] && poll.responses[workerKey].days) || {};
 
                 return `
                     <div class="card" style="border-top: 4px solid #16a34a;">
@@ -428,15 +430,15 @@
                             🟢 <strong>Todo el día</strong> | ☀️ <strong>Mediodía</strong> | 🌙 <strong>Noche</strong> | ❌ <strong>No disponible</strong>
                         </p>
                         ${dates.map(d => {
-                            const val = workerData[d.date] || '❌';
+                            const val = workerData[d.date] || 'none';
                             return `
                                 <div class="day-row">
                                     <strong style="text-transform: capitalize;">${d.label}</strong>
-                                    <select id="poll-${poll.id}-sel-${d.date}" style="width: 150px; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                                        <option value="❌" ${val === '❌' ? 'selected' : ''}>❌ No disponible</option>
-                                        <option value="🟢" ${val === '🟢' ? 'selected' : ''}>🟢 Todo el día</option>
-                                        <option value="☀️" ${val === '☀️' ? 'selected' : ''}>☀️ Mediodía</option>
-                                        <option value="🌙" ${val === '🌙' ? 'selected' : ''}>🌙 Noche</option>
+                                    <select id="poll-${poll.id}-sel-${d.date}" style="width: 170px; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                                        <option value="none" ${val === 'none' ? 'selected' : ''}>❌ No disponible</option>
+                                        <option value="all" ${val === 'all' ? 'selected' : ''}>🟢 Todo el día</option>
+                                        <option value="midday" ${val === 'midday' ? 'selected' : ''}>☀️ Mediodía</option>
+                                        <option value="night" ${val === 'night' ? 'selected' : ''}>🌙 Noche</option>
                                     </select>
                                 </div>
                             `;
@@ -487,15 +489,20 @@
             }
 
             const responses = poll.responses || {};
-            const workerNames = Object.keys(responses);
+            const workerKeys = Object.keys(responses);
             const availableList = [];
 
-            workerNames.forEach(name => {
-                const data = responses[name];
+            // Diccionario para traducir valores internos a emojis bonitos en la vista de encargado
+            const symbolMap = { 'all': '🟢', 'midday': '☀️', 'night': '🌙' };
+
+            workerKeys.forEach(wKey => {
+                const data = responses[wKey];
+                const name = data.name || wKey;
                 const daysObj = data.days || {};
-                const status = daysObj[selectedDate] || '❌';
-                if (status !== '❌') {
-                    availableList.push({ name, status });
+                const rawStatus = daysObj[selectedDate] || 'none';
+                if (rawStatus !== 'none') {
+                    const statusEmoji = symbolMap[rawStatus] || rawStatus;
+                    availableList.push({ name, status: statusEmoji });
                 }
             });
 
@@ -551,8 +558,15 @@
             const ev = events.find(e => e.id == eventId);
             if (ev) {
                 if (!ev.availability) ev.availability = {};
-                ev.availability[currentWorker] = { status: status };
-                db.ref('events/' + eventId).set(ev);
+                const workerKey = currentWorker.dni.replace(/[^a-zA-Z0-9]/g, '_');
+                ev.availability[workerKey] = { name: currentWorker.name, status: status };
+                db.ref('events/' + eventId).set(ev, (error) => {
+                    if (error) {
+                        alert('Error al guardar el evento: ' + error.message);
+                    } else {
+                        alert('¡Apuntado correctamente!');
+                    }
+                });
             }
         }
 
@@ -577,7 +591,8 @@
                 return;
             }
             container.innerHTML = events.map(ev => {
-                const myAv = (ev.availability && ev.availability[currentWorker]) || {};
+                const workerKey = currentWorker.dni.replace(/[^a-zA-Z0-9]/g, '_');
+                const myAv = (ev.availability && ev.availability[workerKey]) || {};
                 return `
                     <div class="card">
                         <div class="event-header">
@@ -626,7 +641,8 @@
                             <div>
                                 <h5 style="font-size:13px; margin-bottom:6px;">🟢 Apuntados (${availables.length})</h5>
                                 ${availables.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Nadie apuntado aún.</p>' : 
-                                    availables.map(([name]) => {
+                                    availables.map(([wKey, v]) => {
+                                        const name = v.name || wKey;
                                         const isAssigned = assignedList.includes(name);
                                         return `
                                             <div style="background:#f8fafc; padding:8px; border-radius:6px; margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
