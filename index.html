@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestión de Disponibilidad - Catering</title>
+    <!-- Firebase SDK Compat -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
         body { background-color: #f8fafc; color: #1e293b; padding-bottom: 40px; }
@@ -85,7 +88,7 @@
             <!-- CREAR NUEVA CONVOCATORIA MENSUAL -->
             <div class="card" style="border-top: 4px solid #16a34a; background: #f0fdf4;">
                 <h3 style="margin-bottom: 8px; color: #166534;">🗓️ Crear Nueva Encuesta de Disponibilidad (Mes / Rango)</h3>
-                <p style="font-size: 13px; color: #475569; margin-bottom: 14px;">Publica un nuevo calendario para que los camareros marquen sus días y turnos (ej: Diciembre, Enero, Puente...).</p>
+                <p style="font-size: 13px; color: #475569; margin-bottom: 14px;">Publica un nuevo calendario para que los camareros marquen sus días y turnos.</p>
                 <form onsubmit="handleCreatePoll(event)">
                     <div class="grid-form">
                         <div class="form-group">
@@ -161,16 +164,47 @@
     </div>
 
     <script>
+        // Configuración oficial de Firebase con tus credenciales
+        const firebaseConfig = {
+            apiKey: "AIzaSyD2HLcGNrj_JFT6TtYaA9gmiSJKeJTVDSU",
+            authDomain: "mallorca-catering-f908b.firebaseapp.com",
+            databaseURL: "https://mallorca-catering-f908b-default-rtdb.firebaseio.com",
+            projectId: "mallorca-catering-f908b",
+            storageBucket: "mallorca-catering-f908b.firebasestorage.app",
+            messagingSenderId: "833676580799",
+            appId: "1:833676580799:web:108af842b3d2c17f2c730a",
+            measurementId: "G-JSTT3MQKTB"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
         let currentWorker = JSON.parse(localStorage.getItem('current_catering_worker')) || null;
-        let events = JSON.parse(localStorage.getItem('catering_events_v2')) || [];
-        let polls = JSON.parse(localStorage.getItem('catering_polls')) || []; // [ { id, title, startDate, endDate, responses: { 'Worker': { 'YYYY-MM-DD': '🟢' } } } ]
+        let events = [];
+        let polls = [];
 
-        function saveEvents() {
-            localStorage.setItem('catering_events_v2', JSON.stringify(events));
-        }
+        // Sincronización en tiempo real con Firebase Realtime Database
+        db.ref('events').on('value', (snapshot) => {
+            const data = snapshot.val();
+            events = data ? Object.values(data) : [];
+            refreshCurrentView();
+        });
 
-        function savePolls() {
-            localStorage.setItem('catering_polls', JSON.stringify(polls));
+        db.ref('polls').on('value', (snapshot) => {
+            const data = snapshot.val();
+            polls = data ? Object.values(data) : [];
+            refreshCurrentView();
+        });
+
+        function refreshCurrentView() {
+            const managerSection = document.getElementById('manager-section');
+            if (managerSection.style.display === 'block') {
+                populateManagerPollSelect();
+                renderManagerEvents();
+            } else if (currentWorker) {
+                renderWaiterPolls();
+                renderWaiterEvents();
+            }
         }
 
         function requestManagerAccess() {
@@ -222,14 +256,12 @@
             switchView('waiter');
         }
 
-        // Generar array de fechas entre inicio y fin
         function getDatesInRange(startDate, endDate) {
             const dates = [];
             let curr = new Date(startDate);
             const last = new Date(endDate);
             while (curr <= last) {
                 const dateStr = curr.toISOString().split('T')[0];
-                const options = { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' };
                 dates.push({ date: dateStr, label: curr.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }) });
                 curr.setDate(curr.getDate() + 1);
             }
@@ -247,25 +279,30 @@
                 return;
             }
 
+            const pollId = String(Date.now());
             const newPoll = {
-                id: Date.now(),
+                id: pollId,
                 title,
                 startDate: start,
                 endDate: end,
-                responses: {} // { 'WorkerName': { '2026-12-07': '🟢', details: {...} } }
+                responses: {}
             };
 
-            polls.unshift(newPoll);
-            savePolls();
-            e.target.reset();
-            alert('¡Convocatoria creada con éxito!');
-            populateManagerPollSelect();
+            db.ref('polls/' + pollId).set(newPoll, (error) => {
+                if (error) {
+                    alert('Error al guardar en la nube.');
+                } else {
+                    e.target.reset();
+                    alert('¡Convocatoria creada y sincronizada con éxito!');
+                }
+            });
         }
 
         function saveWaiterPollResponse(pollId) {
-            const poll = polls.find(p => p.id === pollId);
+            const poll = polls.find(p => p.id == pollId);
             if (!poll) return;
 
+            if (!poll.responses) poll.responses = {};
             if (!poll.responses[currentWorker.name]) {
                 poll.responses[currentWorker.name] = { details: currentWorker, days: {} };
             }
@@ -279,8 +316,13 @@
                 }
             });
 
-            savePolls();
-            alert('¡Tu disponibilidad para esta convocatoria ha sido guardada!');
+            db.ref('polls/' + pollId).set(poll, (error) => {
+                if (error) {
+                    alert('Error al guardar.');
+                } else {
+                    alert('¡Tu disponibilidad ha sido guardada en la nube!');
+                }
+            });
         }
 
         function renderWaiterPolls() {
@@ -292,7 +334,7 @@
 
             container.innerHTML = polls.map(poll => {
                 const dates = getDatesInRange(poll.startDate, poll.endDate);
-                const workerData = (poll.responses[currentWorker.name] && poll.responses[currentWorker.name].days) || {};
+                const workerData = (poll.responses && poll.responses[currentWorker.name] && poll.responses[currentWorker.name].days) || {};
 
                 return `
                     <div class="card" style="border-top: 4px solid #16a34a;">
@@ -315,7 +357,7 @@
                                 </div>
                             `;
                         }).join('')}
-                        <button class="btn btn-success" onclick="saveWaiterPollResponse(${poll.id})" style="width: 100%; margin-top: 16px;">Guardar Disponibilidad</button>
+                        <button class="btn btn-success" onclick="saveWaiterPollResponse('${poll.id}')" style="width: 100%; margin-top: 16px;">Guardar Disponibilidad</button>
                     </div>
                 `;
             }).join('');
@@ -335,8 +377,8 @@
         }
 
         function updateManagerPollDays() {
-            const pollId = parseInt(document.getElementById('manager-poll-select').value);
-            const poll = polls.find(p => p.id === pollId);
+            const pollId = document.getElementById('manager-poll-select').value;
+            const poll = polls.find(p => p.id == pollId);
             const daySelect = document.getElementById('manager-day-select');
 
             if (!poll) {
@@ -350,21 +392,22 @@
         }
 
         function renderManagerPollResults() {
-            const pollId = parseInt(document.getElementById('manager-poll-select').value);
+            const pollId = document.getElementById('manager-poll-select').value;
             const selectedDate = document.getElementById('manager-day-select').value;
             const container = document.getElementById('manager-poll-results');
-            const poll = polls.find(p => p.id === pollId);
+            const poll = polls.find(p => p.id == pollId);
 
             if (!poll || !selectedDate) {
                 container.innerHTML = '<p style="font-size:13px; color:#64748b;">Selecciona una encuesta y un día.</p>';
                 return;
             }
 
-            const workerNames = Object.keys(poll.responses || {});
+            const responses = poll.responses || {};
+            const workerNames = Object.keys(responses);
             const availableList = [];
 
             workerNames.forEach(name => {
-                const data = poll.responses[name];
+                const data = responses[name];
                 const daysObj = data.days || {};
                 const status = daysObj[selectedDate] || '❌';
                 if (status !== '❌') {
@@ -393,8 +436,9 @@
 
         function handleCreateEvent(e) {
             e.preventDefault();
+            const eventId = String(Date.now());
             const newEv = {
-                id: Date.now(),
+                id: eventId,
                 title: document.getElementById('ev-title').value,
                 date: document.getElementById('ev-date').value,
                 location: document.getElementById('ev-location').value,
@@ -404,43 +448,46 @@
                 availability: {},
                 assigned: []
             };
-            events.unshift(newEv);
-            saveEvents();
-            e.target.reset();
-            renderManagerEvents();
+
+            db.ref('events/' + eventId).set(newEv, (error) => {
+                if (error) {
+                    alert('Error al crear el evento.');
+                } else {
+                    e.target.reset();
+                    alert('¡Evento creado y sincronizado en la nube!');
+                }
+            });
         }
 
         function deleteEvent(id) {
             if (confirm('¿Quieres eliminar este evento?')) {
-                events = events.filter(e => e.id !== id);
-                saveEvents();
-                renderManagerEvents();
+                db.ref('events/' + id).remove();
             }
         }
 
         function setAvailability(eventId, status) {
-            const ev = events.find(e => e.id === eventId);
+            const ev = events.find(e => e.id == eventId);
             if (ev) {
+                if (!ev.availability) ev.availability = {};
                 ev.availability[currentWorker.name] = {
                     status: status,
                     workerDetails: currentWorker
                 };
-                saveEvents();
-                renderWaiterEvents();
+                db.ref('events/' + eventId).set(ev);
             }
         }
 
         function toggleAssign(eventId, workerName) {
-            const ev = events.find(e => e.id === eventId);
+            const ev = events.find(e => e.id == eventId);
             if (ev) {
+                if (!ev.assigned) ev.assigned = [];
                 const idx = ev.assigned.indexOf(workerName);
                 if (idx > -1) {
                     ev.assigned.splice(idx, 1);
                 } else {
                     ev.assigned.push(workerName);
                 }
-                saveEvents();
-                renderManagerEvents();
+                db.ref('events/' + eventId).set(ev);
             }
         }
 
@@ -451,7 +498,7 @@
                 return;
             }
             container.innerHTML = events.map(ev => {
-                const myAv = ev.availability[currentWorker.name] || {};
+                const myAv = (ev.availability && ev.availability[currentWorker.name]) || {};
                 return `
                     <div class="card">
                         <div class="event-header">
@@ -465,10 +512,10 @@
                         </div>
                         <p style="font-size:13px; margin-bottom:12px;"><strong>Uniforme:</strong> ${ev.uniform}</p>
                         <div style="display:flex; gap:10px;">
-                            <button class="btn ${myAv.status === 'available' ? 'btn-success' : 'btn-secondary'}" onclick="setAvailability(${ev.id}, 'available')">
+                            <button class="btn ${myAv.status === 'available' ? 'btn-success' : 'btn-secondary'}" onclick="setAvailability('${ev.id}', 'available')">
                                 ${myAv.status === 'available' ? '✅ Apuntado' : 'Apuntarme'}
                             </button>
-                            <button class="btn ${myAv.status === 'busy' ? 'btn-danger' : 'btn-secondary'}" onclick="setAvailability(${ev.id}, 'busy')">
+                            <button class="btn ${myAv.status === 'busy' ? 'btn-danger' : 'btn-secondary'}" onclick="setAvailability('${ev.id}', 'busy')">
                                 ${myAv.status === 'busy' ? '❌ No disponible' : 'No disponible'}
                             </button>
                         </div>
@@ -484,7 +531,8 @@
                 return;
             }
             container.innerHTML = events.map(ev => {
-                const availables = Object.entries(ev.availability).filter(([k, v]) => v.status === 'available');
+                const availables = Object.entries(ev.availability || {}).filter(([k, v]) => v.status === 'available');
+                const assignedList = ev.assigned || [];
                 return `
                     <div class="card">
                         <div class="event-header">
@@ -493,20 +541,20 @@
                                 <h4 style="margin-top:4px;">${ev.title}</h4>
                                 <p style="font-size:13px; color:#64748b;">📍 ${ev.location} | 🕒 ${ev.time}</p>
                             </div>
-                            <button class="btn btn-danger" onclick="deleteEvent(${ev.id})" style="font-size:12px;">🗑️ Eliminar</button>
+                            <button class="btn btn-danger" onclick="deleteEvent('${ev.id}')" style="font-size:12px;">🗑️ Eliminar</button>
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
                             <div>
                                 <h5 style="font-size:13px; margin-bottom:6px;">🟢 Apuntados (${availables.length})</h5>
                                 ${availables.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Nadie apuntado aún.</p>' : 
                                     availables.map(([name, data]) => {
-                                        const isAssigned = ev.assigned.includes(name);
+                                        const isAssigned = assignedList.includes(name);
                                         const d = data.workerDetails || {};
                                         return `
                                             <div style="background:#f8fafc; padding:8px; border-radius:6px; margin-bottom:6px; font-size:12px;">
                                                 <strong>${name}</strong><br>
                                                 📞 ${d.phone || 'S/N'} | NUSS: ${d.nuss || 'S/N'}<br>
-                                                <button class="btn ${isAssigned ? 'btn-danger' : 'btn-main'}" onclick="toggleAssign(${ev.id}, '${name}')" style="font-size:10px; padding:4px 8px; margin-top:4px;">
+                                                <button class="btn ${isAssigned ? 'btn-danger' : 'btn-main'}" onclick="toggleAssign('${ev.id}', '${name}')" style="font-size:10px; padding:4px 8px; margin-top:4px;">
                                                     ${isAssigned ? 'Quitar' : 'Asignar ✓'}
                                                 </button>
                                             </div>
@@ -515,9 +563,9 @@
                                 }
                             </div>
                             <div>
-                                <h5 style="font-size:13px; margin-bottom:6px;">👥 Equipo Cerrado (${ev.assigned.length} / ${ev.needed})</h5>
-                                ${ev.assigned.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Sin asignaciones.</p>' :
-                                    ev.assigned.map(name => `<span class="badge" style="background:#dcfce7; color:#166534; display:inline-block; margin:2px;">✓ ${name}</span>`).join('')
+                                <h5 style="font-size:13px; margin-bottom:6px;">👥 Equipo Cerrado (${assignedList.length} / ${ev.needed})</h5>
+                                ${assignedList.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Sin asignaciones.</p>' :
+                                    assignedList.map(name => `<span class="badge" style="background:#dcfce7; color:#166534; display:inline-block; margin:2px;">✓ ${name}</span>`).join('')
                                 }
                             </div>
                         </div>
