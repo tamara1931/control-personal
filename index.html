@@ -203,7 +203,6 @@
         let habitualWorkers = [];
         let waiterRenderedOnce = false;
 
-        // Compatible con 100% de navegadores Android, iPhone y PC
         db.ref('workers').on('value', (snapshot) => {
             const data = snapshot.val();
             habitualWorkers = [];
@@ -434,30 +433,30 @@
             });
         }
 
+        // GUARDADO DIRECTO A LA RUTA DEL TRABAJADOR (EVITA CONFLICTOS Y SOBRESCRITURAS)
         function saveWaiterPollResponse(pollId) {
             const poll = polls.find(p => p.id == pollId);
             if (!poll) return;
 
-            if (!poll.responses) poll.responses = {};
-            if (!poll.responses[currentWorker.key]) {
-                poll.responses[currentWorker.key] = { name: currentWorker.name, days: {} };
-            }
-
+            const daysData = {};
             const dates = getDatesInRange(poll.startDate, poll.endDate);
             dates.forEach(d => {
                 const sel = document.getElementById(`poll-${pollId}-sel-${d.date}`);
                 if (sel) {
-                    poll.responses[currentWorker.key].days[d.date] = sel.value;
+                    daysData[d.date] = sel.value;
                 }
             });
 
-            db.ref('polls/' + pollId).set(poll, (error) => {
+            const responsePayload = {
+                name: currentWorker.name,
+                days: daysData
+            };
+
+            db.ref('polls/' + pollId + '/responses/' + currentWorker.key).set(responsePayload, (error) => {
                 if (error) {
                     alert('Error al guardar: ' + error.message);
                 } else {
                     alert('¡Tu disponibilidad ha sido guardada en la nube con éxito!');
-                    waiterRenderedOnce = false;
-                    renderWaiterPolls();
                 }
             });
         }
