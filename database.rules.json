@@ -1,0 +1,67 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+        ".write": false,
+
+        ".validate": "newData.hasChildren(['displayName']) && newData.numChildren() === 1 && newData.child('displayName').isString() && newData.child('displayName').val().length > 0 && newData.child('displayName').val().length <= 100"
+      }
+    },
+    "roles": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false,
+        ".validate": "newData.val() === 'admin' || newData.val() === 'employee'"
+      }
+    },
+    "polls": {
+      ".read": "auth != null && (root.child('roles').child(auth.uid).val() === 'employee' || root.child('roles').child(auth.uid).val() === 'admin')",
+      "$pollId": {
+        ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'",
+        ".validate": "newData.hasChildren(['title','startDate','endDate','createdAt']) && newData.numChildren() === 4 && newData.child('title').isString() && newData.child('title').val().length > 0 && newData.child('title').val().length <= 100 && newData.child('startDate').isString() && newData.child('startDate').val().matches(/^\\d{4}-\\d{2}-\\d{2}$/) && newData.child('endDate').isString() && newData.child('endDate').val().matches(/^\\d{4}-\\d{2}-\\d{2}$/) && newData.child('createdAt').isNumber()"
+      }
+    },
+    "pollResponses": {
+      "$pollId": {
+        ".read": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'",
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+          ".write": "auth != null && auth.uid === $uid && root.child('polls').child($pollId).exists()",
+          ".validate": "newData.hasChildren(['displayName','days','updatedAt']) && newData.numChildren() === 3 && newData.child('displayName').isString() && newData.child('displayName').val().length > 0 && newData.child('displayName').val().length <= 100 && newData.child('displayName').val() === root.child('profiles').child($uid).child('displayName').val() && newData.child('days').hasChildren() && newData.child('days').numChildren() <= 62 && newData.child('updatedAt').isNumber()",
+          "days": {
+            "$day": { ".validate": "newData.isString() && (newData.val() === 'none' || newData.val() === 'all' || newData.val() === 'midday' || newData.val() === 'night') && $day.matches(/^\\d{4}-\\d{2}-\\d{2}$/)" }
+          }
+        }
+      }
+    },
+    "events": {
+      ".read": "auth != null",
+      "$eventId": {
+        ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'",
+        ".validate": "newData.hasChildren(['title','date','location','time','uniform','needed','createdAt']) && newData.numChildren() === 7 && newData.child('title').isString() && newData.child('title').val().length > 0 && newData.child('title').val().length <= 100 && newData.child('date').isString() && newData.child('date').val().matches(/^\\d{4}-\\d{2}-\\d{2}$/) && newData.child('location').isString() && newData.child('location').val().length > 0 && newData.child('location').val().length <= 150 && newData.child('time').isString() && newData.child('time').val().length > 0 && newData.child('time').val().length <= 80 && newData.child('uniform').isString() && newData.child('uniform').val().length > 0 && newData.child('uniform').val().length <= 150 && newData.child('needed').isNumber() && newData.child('needed').val() >= 1 && newData.child('needed').val() <= 50 && newData.child('createdAt').isNumber()"
+      }
+    },
+    "eventResponses": {
+      "$eventId": {
+        ".read": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'",
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+          ".write": "auth != null && auth.uid === $uid && root.child('events').child($eventId).exists()",
+          ".validate": "newData.hasChildren(['displayName','status','updatedAt']) && newData.numChildren() === 3 && newData.child('displayName').isString() && newData.child('displayName').val().length > 0 && newData.child('displayName').val().length <= 100 && newData.child('displayName').val() === root.child('profiles').child($uid).child('displayName').val() && newData.child('status').isString() && (newData.child('status').val() === 'available' || newData.child('status').val() === 'busy') && newData.child('updatedAt').isNumber()"
+        }
+      }
+    },
+    "eventAssignments": {
+      "$eventId": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+          ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin' && root.child('events').child($eventId).exists()",
+          ".validate": "newData.hasChildren(['assignedAt']) && newData.numChildren() === 1 && newData.child('assignedAt').isNumber()"
+        }
+      }
+    }
+  }
+}
