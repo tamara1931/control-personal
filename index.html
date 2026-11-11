@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Disponibilidad - Catering</title>
+    <!-- Firebase SDK para sincronización en tiempo real en la nube -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: #f8fafc; color: #1e293b; padding-bottom: 40px; }
+        header { background-color: #0f172a; color: white; padding: 16px; text-align: center; }
+        .header-btns { display: flex; justify-content: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+        .btn { padding: 8px 14px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; font-size: 13px; }
+        .btn-main { background-color: #d97706; color: white; }
+        .btn-secondary { background-color: #334155; color: white; }
+        .btn-danger { background-color: #e11d48; color: white; }
+        .btn-success { background-color: #16a34a; color: white; }
+        .container { max-width: 800px; margin: 20px auto; padding: 0 16px; }
+        .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 14px; text-align: left; }
+        .form-group label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+        .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+        .event-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 12px; }
+        .badge { background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .user-info-tag { font-size: 12px; color: #64748b; background: #f1f5f9; padding: 6px 10px; border-radius: 6px; margin-top: 4px; }
+        .day-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🍽️ Control de Personal - Catering</h1>
+        <div class="header-btns">
+            <button class="btn btn-main" onclick="switchView('waiter')">Mis Disponibilidades</button>
+            <button class="btn btn-main" style="background-color: #0284c7;" onclick="requestManagerAccess()">Vista Encargado 👑</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- VISTA REGISTRO CAMARERO -->
+        <div id="login-section" class="card" style="text-align: center; max-width: 450px; margin: 40px auto; display: none;">
+            <h2 style="margin-bottom: 8px;">Registro de Trabajador</h2>
+            <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Introduce tus datos para acceder a las convocatorias.</p>
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>Nombre Completo:</label>
+                    <input type="text" id="w-name" placeholder="Ej: Maria Garcia Lopez" required>
+                </div>
+                <div class="form-group">
+                    <label>Teléfono:</label>
+                    <input type="tel" id="w-phone" placeholder="Ej: 600123456" required>
+                </div>
+                <div class="form-group">
+                    <label>Nº NUSS (Seguridad Social):</label>
+                    <input type="text" id="w-nuss" placeholder="Ej: 281234567890" required>
+                </div>
+                <div class="form-group">
+                    <label>Fecha de Nacimiento:</label>
+                    <input type="date" id="w-dob" required>
+                </div>
+                <button type="submit" class="btn btn-main" style="width: 100%; margin-top: 10px;">Acceder</button>
+            </form>
+        </div>
+
+        <!-- VISTA CALENDARIOS CAMARERO -->
+        <div id="waiter-section" style="display: none;">
+            <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 12px; color: #64748b;">Trabajador activo:</span>
+                    <h3 id="current-user-display"></h3>
+                    <div id="current-user-details" class="user-info-tag"></div>
+                </div>
+                <button class="btn btn-secondary" onclick="logoutWorker()" style="font-size: 12px;">Cambiar perfil</button>
+            </div>
+
+            <h3 style="margin-bottom: 12px;">📅 Convocatorias de Disponibilidad Abiertas</h3>
+            <div id="waiter-polls-list"></div>
+
+            <h3 style="margin-bottom: 12px; margin-top: 24px;">Servicios Específicos Fijos</h3>
+            <div id="waiter-events-list"></div>
+        </div>
+
+        <!-- VISTA ENCARGADO -->
+        <div id="manager-section" style="display: none;">
+            <!-- CREAR NUEVA CONVOCATORIA MENSUAL -->
+            <div class="card"
