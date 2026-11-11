@@ -164,7 +164,6 @@
     </div>
 
     <script>
-        // Configuración oficial de Firebase con tus credenciales
         const firebaseConfig = {
             apiKey: "AIzaSyD2HLcGNrj_JFT6TtYaA9gmiSJKeJTVDSU",
             authDomain: "mallorca-catering-f908b.firebaseapp.com",
@@ -183,7 +182,7 @@
         let events = [];
         let polls = [];
 
-        // Sincronización en tiempo real con Firebase Realtime Database
+        // Sincronización automática en tiempo real con Firebase
         db.ref('events').on('value', (snapshot) => {
             const data = snapshot.val();
             events = data ? Object.values(data) : [];
