@@ -178,11 +178,16 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let currentWorker = JSON.parse(localStorage.getItem('current_catering_worker')) || null;
+        let currentWorker = null;
+        try {
+            currentWorker = JSON.parse(localStorage.getItem('current_catering_worker')) || null;
+        } catch (e) {
+            console.log('Error leyendo almacenamiento local');
+        }
+
         let events = [];
         let polls = [];
 
-        // Sincronización automática en tiempo real con Firebase
         db.ref('events').on('value', (snapshot) => {
             const data = snapshot.val();
             events = data ? Object.values(data) : [];
@@ -245,13 +250,19 @@
                 nuss: document.getElementById('w-nuss').value.trim(),
                 dob: document.getElementById('w-dob').value
             };
-            localStorage.setItem('current_catering_worker', JSON.stringify(currentWorker));
+            try {
+                localStorage.setItem('current_catering_worker', JSON.stringify(currentWorker));
+            } catch (e) {
+                alert('Aviso: Tu navegador está en modo privado o bloquea el almacenamiento. Es posible que debas registrarte de nuevo al cerrar la app.');
+            }
             switchView('waiter');
         }
 
         function logoutWorker() {
             currentWorker = null;
-            localStorage.removeItem('current_catering_worker');
+            try {
+                localStorage.removeItem('current_catering_worker');
+            } catch (e) {}
             switchView('waiter');
         }
 
