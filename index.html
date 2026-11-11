@@ -21,7 +21,7 @@
         .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .form-group { margin-bottom: 14px; text-align: left; }
         .form-group label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 4px; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; background: white; }
         .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
         .event-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 12px; }
         .badge { background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
@@ -40,28 +40,22 @@
     </header>
 
     <div class="container">
-        <!-- VISTA REGISTRO CAMARERO -->
+        <!-- VISTA SELECCIÓN Y DNI -->
         <div id="login-section" class="card" style="text-align: center; max-width: 450px; margin: 40px auto; display: none;">
-            <h2 style="margin-bottom: 8px;">Registro de Trabajador</h2>
-            <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Introduce tus datos para acceder a las convocatorias.</p>
+            <h2 style="margin-bottom: 8px;">Acceso Trabajadores</h2>
+            <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Selecciona tu nombre e introduce tu DNI para validar tu perfil.</p>
             <form onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label>Nombre Completo:</label>
-                    <input type="text" id="w-name" placeholder="Ej: Maria Garcia Lopez" required>
+                    <label>Nombre:</label>
+                    <select id="worker-select" required style="font-size: 15px; padding: 12px;">
+                        <option value="">-- Cargando listado desde la nube... --</option>
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label>Teléfono:</label>
-                    <input type="tel" id="w-phone" placeholder="Ej: 600123456" required>
+                    <label>Introduce tu DNI:</label>
+                    <input type="text" id="worker-dni" placeholder="Ej: 12345678X" required style="font-size: 15px; padding: 12px; text-transform: uppercase;">
                 </div>
-                <div class="form-group">
-                    <label>Nº NUSS (Seguridad Social):</label>
-                    <input type="text" id="w-nuss" placeholder="Ej: 281234567890" required>
-                </div>
-                <div class="form-group">
-                    <label>Fecha de Nacimiento:</label>
-                    <input type="date" id="w-dob" required>
-                </div>
-                <button type="submit" class="btn btn-main" style="width: 100%; margin-top: 10px;">Acceder</button>
+                <button type="submit" class="btn btn-main" style="width: 100%; margin-top: 10px; padding: 12px; font-size: 15px;">Validar y Acceder</button>
             </form>
         </div>
 
@@ -71,7 +65,7 @@
                 <div>
                     <span style="font-size: 12px; color: #64748b;">Trabajador activo:</span>
                     <h3 id="current-user-display"></h3>
-                    <div id="current-user-details" class="user-info-tag"></div>
+                    <div id="current-user-details" class="user-info-tag">Personal Habitual Validado</div>
                 </div>
                 <button class="btn btn-secondary" onclick="logoutWorker()" style="font-size: 12px;">Cambiar perfil</button>
             </div>
@@ -85,10 +79,28 @@
 
         <!-- VISTA ENCARGADO -->
         <div id="manager-section" style="display: none;">
+            <!-- AÑADIR NUEVO TRABAJADOR A LA NUBE -->
+            <div class="card" style="border-top: 4px solid #d97706; background: #fffbeb;">
+                <h3 style="margin-bottom: 8px; color: #92400e;">➕ Dar de Alta Nuevo Trabajador Habitual</h3>
+                <p style="font-size: 13px; color: #475569; margin-bottom: 14px;">Añade a un nuevo trabajador directamente a la nube para que aparezca en el desplegable de todos los móviles.</p>
+                <form onsubmit="handleAddNewWorker(event)">
+                    <div class="grid-form">
+                        <div class="form-group">
+                            <label>Nombre Completo:</label>
+                            <input type="text" id="new-w-name" placeholder="Ej: Maria Perez Gomez" required style="text-transform: uppercase;">
+                        </div>
+                        <div class="form-group">
+                            <label>DNI:</label>
+                            <input type="text" id="new-w-dni" placeholder="Ej: 12345678X" required style="text-transform: uppercase;">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-main" style="width: 100%; margin-top: 10px;">Guardar Trabajador en la Nube</button>
+                </form>
+            </div>
+
             <!-- CREAR NUEVA CONVOCATORIA MENSUAL -->
             <div class="card" style="border-top: 4px solid #16a34a; background: #f0fdf4;">
                 <h3 style="margin-bottom: 8px; color: #166534;">🗓️ Crear Nueva Encuesta de Disponibilidad (Mes / Rango)</h3>
-                <p style="font-size: 13px; color: #475569; margin-bottom: 14px;">Publica un nuevo calendario para que los camareros marquen sus días y turnos.</p>
                 <form onsubmit="handleCreatePoll(event)">
                     <div class="grid-form">
                         <div class="form-group">
@@ -114,11 +126,11 @@
                 <div class="grid-form" style="margin-bottom: 14px;">
                     <div class="form-group">
                         <label>Selecciona la Encuesta:</label>
-                        <select id="manager-poll-select" onchange="updateManagerPollDays()" style="background:white;"></select>
+                        <select id="manager-poll-select" onchange="updateManagerPollDays()"></select>
                     </div>
                     <div class="form-group">
                         <label>Selecciona el Día:</label>
-                        <select id="manager-day-select" onchange="renderManagerPollResults()" style="background:white;"></select>
+                        <select id="manager-day-select" onchange="renderManagerPollResults()"></select>
                     </div>
                 </div>
                 <div id="manager-poll-results" style="margin-top: 12px;"></div>
@@ -181,12 +193,29 @@
         let currentWorker = null;
         try {
             currentWorker = JSON.parse(localStorage.getItem('current_catering_worker')) || null;
-        } catch (e) {
-            console.log('Error leyendo almacenamiento local');
-        }
+        } catch (e) {}
 
         let events = [];
         let polls = [];
+        let habitualWorkers = [];
+
+        // Sincronizar listado de trabajadores desde Firebase en tiempo real
+        db.ref('workers').on('value', (snapshot) => {
+            const data = snapshot.val();
+            habitualWorkers = data ? Object.values(data) : [];
+            populateWorkerSelect();
+        });
+
+        function populateWorkerSelect() {
+            const select = document.getElementById('worker-select');
+            if (habitualWorkers.length === 0) {
+                select.innerHTML = '<option value="">No hay trabajadores en la nube</option>';
+                return;
+            }
+            habitualWorkers.sort((a, b) => a.name.localeCompare(b.name));
+            select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
+                habitualWorkers.map(w => `<option value="${w.name}">${w.name}</option>`).join('');
+        }
 
         db.ref('events').on('value', (snapshot) => {
             const data = snapshot.val();
@@ -232,8 +261,7 @@
             } else {
                 if (currentWorker) {
                     document.getElementById('waiter-section').style.display = 'block';
-                    document.getElementById('current-user-display').innerText = currentWorker.name;
-                    document.getElementById('current-user-details').innerText = `Tel: ${currentWorker.phone} | NUSS: ${currentWorker.nuss} | F.Nac: ${currentWorker.dob}`;
+                    document.getElementById('current-user-display').innerText = currentWorker;
                     renderWaiterPolls();
                     renderWaiterEvents();
                 } else {
@@ -244,18 +272,46 @@
 
         function handleLogin(e) {
             e.preventDefault();
-            currentWorker = {
-                name: document.getElementById('w-name').value.trim(),
-                phone: document.getElementById('w-phone').value.trim(),
-                nuss: document.getElementById('w-nuss').value.trim(),
-                dob: document.getElementById('w-dob').value
-            };
+            const selectedName = document.getElementById('worker-select').value;
+            const enteredDni = document.getElementById('worker-dni').value.trim().toUpperCase();
+
+            if (!selectedName) {
+                alert('Por favor, selecciona tu nombre.');
+                return;
+            }
+
+            const foundWorker = habitualWorkers.find(w => w.name === selectedName);
+            if (foundWorker && foundWorker.dni && foundWorker.dni !== enteredDni) {
+                alert('El DNI introducido no coincide con el registrado para este trabajador.');
+                return;
+            }
+
+            currentWorker = selectedName;
             try {
                 localStorage.setItem('current_catering_worker', JSON.stringify(currentWorker));
-            } catch (e) {
-                alert('Aviso: Tu navegador está en modo privado o bloquea el almacenamiento. Es posible que debas registrarte de nuevo al cerrar la app.');
-            }
+            } catch (e) {}
             switchView('waiter');
+        }
+
+        function handleAddNewWorker(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-w-name').value.trim().toUpperCase();
+            const dni = document.getElementById('new-w-dni').value.trim().toUpperCase();
+
+            if (!name || !dni) {
+                alert('Introduce el nombre y el DNI.');
+                return;
+            }
+
+            const workerId = dni.replace(/[^a-zA-Z0-9]/g, '_');
+            db.ref('workers/' + workerId).set({ name, dni }, (error) => {
+                if (error) {
+                    alert('Error al guardar en la nube.');
+                } else {
+                    e.target.reset();
+                    alert(`¡Trabajador ${name} añadido a la nube con éxito! Ya aparece en el desplegable.`);
+                }
+            });
         }
 
         function logoutWorker() {
@@ -263,7 +319,7 @@
             try {
                 localStorage.removeItem('current_catering_worker');
             } catch (e) {}
-            switchView('waiter');
+            switchView('login-section');
         }
 
         function getDatesInRange(startDate, endDate) {
@@ -313,16 +369,15 @@
             if (!poll) return;
 
             if (!poll.responses) poll.responses = {};
-            if (!poll.responses[currentWorker.name]) {
-                poll.responses[currentWorker.name] = { details: currentWorker, days: {} };
+            if (!poll.responses[currentWorker]) {
+                poll.responses[currentWorker] = { days: {} };
             }
-            poll.responses[currentWorker.name].details = currentWorker;
 
             const dates = getDatesInRange(poll.startDate, poll.endDate);
             dates.forEach(d => {
                 const sel = document.getElementById(`poll-${pollId}-sel-${d.date}`);
                 if (sel) {
-                    poll.responses[currentWorker.name].days[d.date] = sel.value;
+                    poll.responses[currentWorker].days[d.date] = sel.value;
                 }
             });
 
@@ -344,7 +399,7 @@
 
             container.innerHTML = polls.map(poll => {
                 const dates = getDatesInRange(poll.startDate, poll.endDate);
-                const workerData = (poll.responses && poll.responses[currentWorker.name] && poll.responses[currentWorker.name].days) || {};
+                const workerData = (poll.responses && poll.responses[currentWorker] && poll.responses[currentWorker].days) || {};
 
                 return `
                     <div class="card" style="border-top: 4px solid #16a34a;">
@@ -421,7 +476,7 @@
                 const daysObj = data.days || {};
                 const status = daysObj[selectedDate] || '❌';
                 if (status !== '❌') {
-                    availableList.push({ name, status, details: data.details || {} });
+                    availableList.push({ name, status });
                 }
             });
 
@@ -434,10 +489,8 @@
                 <p style="font-size: 13px; font-weight: 600; color: #166534; margin-bottom: 8px;">Personal disponible (${availableList.length}):</p>
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">
                     ${availableList.map(item => `
-                        <div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px;">
-                            <strong style="font-size: 13px; color: #0f172a;">${item.name}</strong> <span style="font-size: 15px;">${item.status}</span><br>
-                            📞 ${item.details.phone || 'S/N'} | NUSS: ${item.details.nuss || 'S/N'}<br>
-                            🎂 F.Nac: ${item.details.dob || 'S/N'}
+                        <div style="background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 13px;">
+                            <strong>${item.name}</strong> <span style="font-size: 15px;">${item.status}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -479,10 +532,7 @@
             const ev = events.find(e => e.id == eventId);
             if (ev) {
                 if (!ev.availability) ev.availability = {};
-                ev.availability[currentWorker.name] = {
-                    status: status,
-                    workerDetails: currentWorker
-                };
+                ev.availability[currentWorker] = { status: status };
                 db.ref('events/' + eventId).set(ev);
             }
         }
@@ -508,7 +558,7 @@
                 return;
             }
             container.innerHTML = events.map(ev => {
-                const myAv = (ev.availability && ev.availability[currentWorker.name]) || {};
+                const myAv = (ev.availability && ev.availability[currentWorker]) || {};
                 return `
                     <div class="card">
                         <div class="event-header">
@@ -557,14 +607,12 @@
                             <div>
                                 <h5 style="font-size:13px; margin-bottom:6px;">🟢 Apuntados (${availables.length})</h5>
                                 ${availables.length === 0 ? '<p style="font-size:12px; color:#94a3b8;">Nadie apuntado aún.</p>' : 
-                                    availables.map(([name, data]) => {
+                                    availables.map(([name]) => {
                                         const isAssigned = assignedList.includes(name);
-                                        const d = data.workerDetails || {};
                                         return `
-                                            <div style="background:#f8fafc; padding:8px; border-radius:6px; margin-bottom:6px; font-size:12px;">
-                                                <strong>${name}</strong><br>
-                                                📞 ${d.phone || 'S/N'} | NUSS: ${d.nuss || 'S/N'}<br>
-                                                <button class="btn ${isAssigned ? 'btn-danger' : 'btn-main'}" onclick="toggleAssign('${ev.id}', '${name}')" style="font-size:10px; padding:4px 8px; margin-top:4px;">
+                                            <div style="background:#f8fafc; padding:8px; border-radius:6px; margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+                                                <strong>${name}</strong>
+                                                <button class="btn ${isAssigned ? 'btn-danger' : 'btn-main'}" onclick="toggleAssign('${ev.id}', '${name}')" style="font-size:10px; padding:4px 8px;">
                                                     ${isAssigned ? 'Quitar' : 'Asignar ✓'}
                                                 </button>
                                             </div>
@@ -583,8 +631,6 @@
                 `;
             }).join('');
         }
-
-        switchView('waiter');
     </script>
 </body>
 </html>
