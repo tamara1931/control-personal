@@ -203,10 +203,20 @@
         let habitualWorkers = [];
         let waiterRenderedOnce = false;
 
+        // Compatible con 100% de navegadores Android, iPhone y PC
         db.ref('workers').on('value', (snapshot) => {
             const data = snapshot.val();
-            habitualWorkers = data ? Object.values(data) : [];
-            habitualWorkers.sort((a, b) => a.name.localeCompare(b.name));
+            habitualWorkers = [];
+            if (data) {
+                for (let key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        habitualWorkers.push(data[key]);
+                    }
+                }
+            }
+            habitualWorkers.sort(function(a, b) {
+                return a.name.localeCompare(b.name);
+            });
             populateWorkerSelect(habitualWorkers);
         });
 
@@ -216,9 +226,11 @@
                 select.innerHTML = '<option value="">No hay resultados</option>';
                 return;
             }
-            // SÓLO MUESTRA EL NOMBRE Y APELLIDO (PRIVACIDAD DE DNI MANTENIDA)
-            select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
-                list.map((w, index) => `<option value="${index}">${w.name}</option>`).join('');
+            var html = '<option value="">-- Selecciona tu nombre --</option>';
+            for (var i = 0; i < list.length; i++) {
+                html += '<option value="' + i + '">' + list[i].name + '</option>';
+            }
+            select.innerHTML = html;
         }
 
         function filterWorkerList() {
@@ -233,22 +245,37 @@
                 select.innerHTML = '<option value="">No hay resultados</option>';
                 return;
             }
-            select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
-                filtered.map((w) => {
-                    const originalIndex = habitualWorkers.findIndex(item => item.name === w.name);
-                    return `<option value="${originalIndex}">${w.name}</option>`;
-                }).join('');
+            var html = '<option value="">-- Selecciona tu nombre --</option>';
+            for (var i = 0; i < filtered.length; i++) {
+                var originalIndex = habitualWorkers.indexOf(filtered[i]);
+                html += '<option value="' + originalIndex + '">' + filtered[i].name + '</option>';
+            }
+            select.innerHTML = html;
         }
 
         db.ref('events').on('value', (snapshot) => {
             const data = snapshot.val();
-            events = data ? Object.values(data) : [];
+            events = [];
+            if (data) {
+                for (let key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        events.push(data[key]);
+                    }
+                }
+            }
             refreshCurrentView();
         });
 
         db.ref('polls').on('value', (snapshot) => {
             const data = snapshot.val();
-            polls = data ? Object.values(data) : [];
+            polls = [];
+            if (data) {
+                for (let key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        polls.push(data[key]);
+                    }
+                }
+            }
             const managerSection = document.getElementById('manager-section');
             if (managerSection.style.display === 'block' || !waiterRenderedOnce) {
                 refreshCurrentView();
@@ -314,7 +341,6 @@
                 return;
             }
 
-            // Validar DNI OBLIGATORIO (excepto si es Mohamed Ouladi o si no tiene DNI registrado)
             const hasDniInDb = foundWorker.dni && foundWorker.dni.trim() !== '' && foundWorker.dni.trim() !== 'NAN' && foundWorker.dni.trim() !== 'undefined';
             
             if (hasDniInDb) {
@@ -323,7 +349,6 @@
                     return;
                 }
             } else {
-                // Si es Mohamed Ouladi o alguien sin DNI en la BD, exigimos que escriba algo o validamos su nombre
                 if (!enteredDni) {
                     alert('Por favor, introduce tu DNI.');
                     return;
