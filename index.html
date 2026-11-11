@@ -40,15 +40,19 @@
     </header>
 
     <div class="container">
-        <!-- VISTA SELECCIÓN Y DNI -->
+        <!-- VISTA SELECCIÓN, BUSCADOR Y DNI -->
         <div id="login-section" class="card" style="text-align: center; max-width: 450px; margin: 40px auto; display: none;">
             <h2 style="margin-bottom: 8px;">Acceso Trabajadores</h2>
-            <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Selecciona tu nombre e introduce tu DNI para validar tu perfil.</p>
+            <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Busca tu nombre, selecciónalo e introduce tu DNI para validar tu perfil.</p>
             <form onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label>Nombre:</label>
+                    <label>🔍 Buscar tu Nombre:</label>
+                    <input type="text" id="worker-search-input" placeholder="Escribe parte de tu nombre o apellido..." oninput="filterWorkerList()" style="font-size: 14px; padding: 10px; margin-bottom: 8px;">
+                </div>
+                <div class="form-group">
+                    <label>Selecciona tu Nombre:</label>
                     <select id="worker-select" required style="font-size: 15px; padding: 12px;">
-                        <option value="">-- Cargando listado desde la nube... --</option>
+                        <option value="">-- Cargando listado oficial... --</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -79,15 +83,14 @@
 
         <!-- VISTA ENCARGADO -->
         <div id="manager-section" style="display: none;">
-            <!-- AÑADIR NUEVO TRABAJADOR A LA NUBE -->
+            <!-- AÑADIR NUEVO TRABAJADOR -->
             <div class="card" style="border-top: 4px solid #d97706; background: #fffbeb;">
                 <h3 style="margin-bottom: 8px; color: #92400e;">➕ Dar de Alta Nuevo Trabajador Habitual</h3>
-                <p style="font-size: 13px; color: #475569; margin-bottom: 14px;">Añade a un nuevo trabajador directamente a la nube para que aparezca en el desplegable de todos los móviles.</p>
                 <form onsubmit="handleAddNewWorker(event)">
                     <div class="grid-form">
                         <div class="form-group">
                             <label>Nombre Completo:</label>
-                            <input type="text" id="new-w-name" placeholder="Ej: Maria Perez Gomez" required style="text-transform: uppercase;">
+                            <input type="text" id="new-w-name" placeholder="Ej: MARIA PEREZ GOMEZ" required style="text-transform: uppercase;">
                         </div>
                         <div class="form-group">
                             <label>DNI:</label>
@@ -100,7 +103,7 @@
 
             <!-- CREAR NUEVA CONVOCATORIA MENSUAL -->
             <div class="card" style="border-top: 4px solid #16a34a; background: #f0fdf4;">
-                <h3 style="margin-bottom: 8px; color: #166534;">🗓️ Crear Nueva Encuesta de Disponibilidad (Mes / Rango)</h3>
+                <h3 style="margin-bottom: 8px; color: #166534;">🗓️ Crear Nueva Encuesta de Disponibilidad</h3>
                 <form onsubmit="handleCreatePoll(event)">
                     <div class="grid-form">
                         <div class="form-group">
@@ -199,22 +202,31 @@
         let polls = [];
         let habitualWorkers = [];
 
-        // Sincronizar listado de trabajadores desde Firebase en tiempo real
         db.ref('workers').on('value', (snapshot) => {
             const data = snapshot.val();
             habitualWorkers = data ? Object.values(data) : [];
-            populateWorkerSelect();
+            habitualWorkers.sort((a, b) => a.name.localeCompare(b.name));
+            populateWorkerSelect(habitualWorkers);
         });
 
-        function populateWorkerSelect() {
+        function populateWorkerSelect(list) {
             const select = document.getElementById('worker-select');
-            if (habitualWorkers.length === 0) {
-                select.innerHTML = '<option value="">No hay trabajadores en la nube</option>';
+            if (list.length === 0) {
+                select.innerHTML = '<option value="">No hay resultados</option>';
                 return;
             }
-            habitualWorkers.sort((a, b) => a.name.localeCompare(b.name));
             select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
-                habitualWorkers.map(w => `<option value="${w.name}">${w.name}</option>`).join('');
+                list.map(w => `<option value="${w.name}">${w.name}</option>`).join('');
+        }
+
+        function filterWorkerList() {
+            const query = document.getElementById('worker-search-input').value.trim().toLowerCase();
+            if (!query) {
+                populateWorkerSelect(habitualWorkers);
+                return;
+            }
+            const filtered = habitualWorkers.filter(w => w.name.toLowerCase().includes(query));
+            populateWorkerSelect(filtered);
         }
 
         db.ref('events').on('value', (snapshot) => {
@@ -281,9 +293,16 @@
             }
 
             const foundWorker = habitualWorkers.find(w => w.name === selectedName);
-            if (foundWorker && foundWorker.dni && foundWorker.dni !== enteredDni) {
-                alert('El DNI introducido no coincide con el registrado para este trabajador.');
+            if (!foundWorker) {
+                alert('El trabajador seleccionado no se encuentra en la base de datos.');
                 return;
+            }
+
+            if (foundWorker.dni && foundWorker.dni !== '' && foundWorker.dni !== 'NAN') {
+                if (foundWorker.dni !== enteredDni) {
+                    alert('El DNI introducido no coincide con el registrado en la base de datos.');
+                    return;
+                }
             }
 
             currentWorker = selectedName;
@@ -306,10 +325,10 @@
             const workerId = dni.replace(/[^a-zA-Z0-9]/g, '_');
             db.ref('workers/' + workerId).set({ name, dni }, (error) => {
                 if (error) {
-                    alert('Error al guardar en la nube.');
+                    alert('Error al guardar.');
                 } else {
                     e.target.reset();
-                    alert(`¡Trabajador ${name} añadido a la nube con éxito! Ya aparece en el desplegable.`);
+                    alert(`¡Trabajador ${name} añadido a la base de datos con éxito! Ya aparece en el desplegable.`);
                 }
             });
         }
@@ -356,10 +375,10 @@
 
             db.ref('polls/' + pollId).set(newPoll, (error) => {
                 if (error) {
-                    alert('Error al guardar en la nube.');
+                    alert('Error al guardar.');
                 } else {
                     e.target.reset();
-                    alert('¡Convocatoria creada y sincronizada con éxito!');
+                    alert('¡Convocatoria creada con éxito!');
                 }
             });
         }
@@ -517,7 +536,7 @@
                     alert('Error al crear el evento.');
                 } else {
                     e.target.reset();
-                    alert('¡Evento creado y sincronizado en la nube!');
+                    alert('¡Evento creado con éxito!');
                 }
             });
         }
@@ -630,6 +649,12 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        if (!currentWorker) {
+            switchView('login');
+        } else {
+            switchView('waiter');
         }
     </script>
 </body>
