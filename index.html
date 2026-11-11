@@ -216,7 +216,7 @@
                 return;
             }
             select.innerHTML = '<option value="">-- Selecciona tu nombre --</option>' + 
-                list.map(w => `<option value="${w.dni}">${w.name}</option>`).join('');
+                list.map((w, index) => `<option value="${w.dni}_${index}">${w.name} (${w.dni || 'Sin DNI'})</option>`).join('');
         }
 
         function filterWorkerList() {
@@ -284,28 +284,31 @@
 
         function handleLogin(e) {
             e.preventDefault();
-            const selectedDni = document.getElementById('worker-select').value;
+            const selectedVal = document.getElementById('worker-select').value;
             const enteredDni = document.getElementById('worker-dni').value.trim().toUpperCase();
 
-            if (!selectedDni) {
+            if (!selectedVal) {
                 alert('Por favor, selecciona tu nombre.');
                 return;
             }
 
-            const foundWorker = habitualWorkers.find(w => w.dni === selectedDni);
+            const parts = selectedVal.split('_');
+            const targetDni = parts[0];
+            const foundWorker = habitualWorkers.find(w => w.dni === targetDni);
+
             if (!foundWorker) {
                 alert('El trabajador seleccionado no se encuentra en la base de datos.');
                 return;
             }
 
-            if (foundWorker.dni && foundWorker.dni !== '' && foundWorker.dni !== 'NAN') {
-                if (foundWorker.dni !== enteredDni) {
+            if (foundWorker.dni && foundWorker.dni !== '' && foundWorker.dni !== 'NAN' && foundWorker.dni !== 'undefined') {
+                if (foundWorker.dni.trim().toUpperCase() !== enteredDni) {
                     alert('El DNI introducido no coincide con el registrado en la base de datos.');
                     return;
                 }
             }
 
-            currentWorker = { dni: foundWorker.dni, name: foundWorker.name };
+            currentWorker = { dni: foundWorker.dni || 'SIN_DNI', name: foundWorker.name };
             try {
                 localStorage.setItem('current_catering_worker_obj', JSON.stringify(currentWorker));
             } catch (e) {}
@@ -383,9 +386,13 @@
             });
         }
 
-        function saveWaiterPollResponse(pollId) {
+        // GUARDADO AUTOMÁTICO AL CAMBIAR CUALQUIER DESPLEGABLE DE DÍA
+        function updatePollDayAuto(pollId, dateStr) {
             const poll = polls.find(p => p.id == pollId);
             if (!poll) return;
+
+            const sel = document.getElementById(`poll-${pollId}-sel-${dateStr}`);
+            if (!sel) return;
 
             if (!poll.responses) poll.responses = {};
             const workerKey = currentWorker.dni.replace(/[^a-zA-Z0-9]/g, '_');
@@ -393,19 +400,11 @@
                 poll.responses[workerKey] = { name: currentWorker.name, days: {} };
             }
 
-            const dates = getDatesInRange(poll.startDate, poll.endDate);
-            dates.forEach(d => {
-                const sel = document.getElementById(`poll-${pollId}-sel-${d.date}`);
-                if (sel) {
-                    poll.responses[workerKey].days[d.date] = sel.value;
-                }
-            });
+            poll.responses[workerKey].days[dateStr] = sel.value;
 
             db.ref('polls/' + pollId).set(poll, (error) => {
                 if (error) {
-                    alert('Error al guardar: ' + error.message);
-                } else {
-                    alert('¡Tu disponibilidad ha sido guardada en la nube con éxito!');
+                    console.error('Error al guardar automáticamente:', error);
                 }
             });
         }
@@ -434,7 +433,7 @@
                             return `
                                 <div class="day-row">
                                     <strong style="text-transform: capitalize;">${d.label}</strong>
-                                    <select id="poll-${poll.id}-sel-${d.date}" style="width: 170px; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                                    <select id="poll-${poll.id}-sel-${d.date}" onchange="updatePollDayAuto('${poll.id}', '${d.date}')" style="width: 170px; padding: 6px; border-radius: 6px; border: 1px solid #cbd5e1;">
                                         <option value="none" ${val === 'none' ? 'selected' : ''}>❌ No disponible</option>
                                         <option value="all" ${val === 'all' ? 'selected' : ''}>🟢 Todo el día</option>
                                         <option value="midday" ${val === 'midday' ? 'selected' : ''}>☀️ Mediodía</option>
@@ -443,7 +442,6 @@
                                 </div>
                             `;
                         }).join('')}
-                        <button class="btn btn-success" onclick="saveWaiterPollResponse('${poll.id}')" style="width: 100%; margin-top: 16px;">Guardar Disponibilidad</button>
                     </div>
                 `;
             }).join('');
@@ -491,8 +489,6 @@
             const responses = poll.responses || {};
             const workerKeys = Object.keys(responses);
             const availableList = [];
-
-            // Diccionario para traducir valores internos a emojis bonitos en la vista de encargado
             const symbolMap = { 'all': '🟢', 'midday': '☀️', 'night': '🌙' };
 
             workerKeys.forEach(wKey => {
